@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Safe Health Assistant — No Dosage Given</title>
+<style>
+  :root{
+    --bg:#eef2f7; --card:#fff; --primary:#1d4ed8; --accent:#10b981; --danger:#ef4444;
+    --muted:#6b7280; --radius:12px;
+  }
+  body{font-family:Inter,Arial,sans-serif;background:var(--bg);margin:0;padding:18px;color:#0f172a;}
+  .wrap{max-width:980px;margin:0 auto;display:grid;grid-template-columns:360px 1fr;gap:18px;}
+  .panel{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 6px 20px rgba(16,24,40,0.06);}
+  h1{color:var(--primary);margin:0 0 8px;font-size:18px;}
+  label{display:block;margin-top:10px;color:var(--muted);font-size:13px;}
+  input,select,textarea{width:100%;padding:9px;margin-top:6px;border-radius:8px;border:1px solid #e6eefb;box-sizing:border-box}
+  button{background:var(--primary);color:#fff;border:none;padding:10px;border-radius:8px;cursor:pointer;font-weight:600}
+  .mutebtn{background:#64748b}
+  #chatbox{height:520px;overflow:auto;padding:12px;border-radius:8px;border:1px solid #e6eefb;background:#fbfeff}
+  .msg{margin:10px 0;max-width:88%;padding:10px;border-radius:10px}
+  .user{background:#eef2ff;color:var(--primary);margin-left:auto}
+  .bot{background:#f0fff4;color:#065f46}
+  .controls{display:flex;gap:8px;margin-top:10px}
+  .small{font-size:13px;color:var(--muted)}
+  .tools{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .langBtn{background:#10b981}
+  .footerNote{font-size:13px;color:var(--muted);margin-top:12px}
+  .urgentBox{background:linear-gradient(90deg,#ffe7e7,#fff1f0);border-left:4px solid var(--danger);padding:10px;border-radius:8px;margin-top:10px}
+  .doctorModal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;padding:16px;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,0.2);width:90%;max-width:560px;z-index:9999;display:none}
+  .modalOverlay{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9998;display:none}
+  .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2ff;color:var(--primary);font-weight:600}
+  @media(max-width:940px){.wrap{grid-template-columns:1fr}.panel{padding:12px}#chatbox{height:360px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- LEFT: Profile & Controls -->
+  <div class="panel">
+    <h1>💙 Safe Health Assistant</h1>
+
+    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+      <div class="small">Language</div>
+      <div>
+        <button class="langBtn" onclick="setLang('en')">EN</button>
+        <button class="langBtn" onclick="setLang('hi')">HI</button>
+      </div>
+    </div>
+
+    <label id="lblName">Full name</label>
+    <input id="name" placeholder="Your name"/>
+
+    <label id="lblAge">Age</label>
+    <input id="age" type="number" min="0" placeholder="e.g., 22"/>
+
+    <label id="lblGender">Gender</label>
+    <select id="gender">
+      <option value="">Select</option>
+      <option value="female">Female</option>
+      <option value="male">Male</option>
+      <option value="other">Other</option>
+    </select>
+
+    <label id="lblConditions">Known conditions / allergies (optional)</label>
+    <input id="conditions" placeholder="e.g., asthma, diabetes, penicillin allergy"/>
+
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button id="btnSave" onclick="saveProfile()">Save Profile</button>
+      <button class="mutebtn" onclick="clearProfile()">Clear</button>
+    </div>
+
+    <div class="small" id="profileStatus" style="margin-top:8px">Profile not saved</div>
+
+    <hr style="margin:12px 0"/>
+
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong id="quickTitle">Quick Actions</strong>
+      <div class="small" id="chatCount">0 messages</div>
+    </div>
+
+    <div class="tools">
+      <button onclick="addSystem('symptom_help')">Symptom help</button>
+      <button onclick="addSystem('exercise_tip')">Exercise tip</button>
+      <button onclick="addSystem('urgent')">Urgency check</button>
+      <button onclick="showHistory()">View History</button>
+      <button onclick="exportChat()">Export Chat</button>
+      <button onclick="openDoctorModal()">Prepare Doctor Message</button>
+    </div>
+
+    <div class="footerNote" id="disclaimer">
+      <strong>Disclaimer:</strong> I provide general info only — never give dosing or prescriptions. For dosing/one-day medicine plans, consult a doctor or pharmacist.
+    </div>
+  </div>
+
+  <!-- RIGHT: Chat -->
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <strong id="chatTitle">Chat</strong>
+        <div class="small" id="chatSubtitle">Ask symptoms, medicines (generic names), diet, exercise, or "not feeling well".</div>
+      </div>
+      <div class="small" id="profileBadge">No profile</div>
+    </div>
+
+    <div id="chatbox" role="log" aria-live="polite"></div>
+
+    <div style="margin-top:10px">
+      <input id="inputBox" placeholder="e.g., fever, not feeling well, what to eat for diabetes"/>
+      <div class="controls">
+        <button onclick="userSend()">Send</button>
+        <button class="mutebtn" onclick="addMessage('bot', getPersonalizedTip())">Get Tip</button>
+        <button onclick="exportReport()">Export Summary</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Doctor consult modal -->
+<div class="modalOverlay" id="modalOverlay"></div>
+<div class="doctorModal" id="doctorModal" role="dialog" aria-modal="true" aria-labelledby="doctorTitle">
+  <h3 id="doctorTitle">Doctor Consultation Template</h3>
+  <p class="small" id="doctorIntro">This template helps you share key info with a doctor quickly. Edit before sending.</p>
+  <textarea id="doctorTemplate" style="width:100%;height:180px;border-radius:8px;border:1px solid #e6eefb;padding:10px;"></textarea>
+  <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+    <button onclick="copyDoctorTemplate()">Copy Template</button>
+    <button class="mutebtn" onclick="closeDoctorModal()">Close</button>
+  </div>
+</div>
+
+<script>
+/* ------------------------
+   Localized strings
+   ------------------------ */
+const locales = {
+  en:{
+    welcome:"Hello — I'm a Safe Health Assistant. Ask about symptoms, generic medicines (no dosing), diet, exercise, or say 'not feeling well'.",
+    saveProfileMsg:"Profile saved. I will personalize tips.",
+    profileNotSaved:"Profile not saved",
+    profileSavedBadge:name=>`${name} • profile saved`,
+    symptom_help:"I can suggest common OTC medicine types (no dosing), a safe one-day home-care plan, diet advice, exercise tips, and prepare a doctor-consult template. Try: 'fever', 'not feeling well', 'diet for diabetes'.",
+    urgent:"⚠️ If severe difficulty breathing, chest pain, fainting, severe bleeding, or blue lips occur, call emergency services now.",
+    emergency_prompt:"This may be an emergency. Seek immediate medical help or call emergency services.",
+    notFeelingWell:"I'm sorry you're unwell. Tell me your main symptom (fever, breath, chest pain, faint, dizziness). I can provide a one-day home-care plan and recommend seeing a doctor.",
+    diet_title:"Diet Plan",
+    medicine_title:"Medicines commonly used (generic names only)",
+    homecare_title:"One-day Home-Care Plan (safe, non-prescriptive)",
+    doctor_template_intro:"Fill patient details and symptoms, then copy & send to your doctor or show it at clinic.",
+    disclaimer:"This is general information, not a prescription. For exact dosing and prescriptions, consult a qualified doctor or pharmacist."
+  },
+  hi:{
+    welcome:"नमस्ते — मैं एक सेफ हेल्थ असिस्टेंट हूँ। लक्षण, सामान्य दवाइयाँ (खुराक नहीं), आहार, व्यायाम पूछें या 'ठीक नहीं लग रहा' कहें।",
+    saveProfileMsg:"प्रोफ़ाइल सहेजी गई। सुझाव व्यक्तिगत होंगे।",
+    profileNotSaved:"प्रोफ़ाइल सुरक्षित नहीं हुई",
+    profileSavedBadge:name=>`${name} • प्रोफ़ाइल सुरक्षित`,
+    symptom_help:"मैं सामान्य OTC दवाइयाँ (खुराक नहीं), एक-दिन का घरेलू देखभाल योजना, आहार सलाह, व्यायाम सुझाव दे सकता हूँ और डॉक्टर के लिए संदेश तैयार कर सकता हूँ। कोशिश करें: 'fever', 'ठीक नहीं लग रहा', 'diabetes के लिए आहार'।",
+    urgent:"⚠️ अगर सांस लेने में गंभीर परेशानी, सीने का दर्द, बेहोशी, गंभीर रक्तस्राव, या नीला मुंह हो — तुरंत इमरजेंसी सेवाएँ बुलाएँ।",
+    emergency_prompt:"यह आपातकालीन प्रतीत हो सकता है। तत्काल चिकित्सा सहायता लें या इमरजेंसी सेवाएँ बुलाएँ।",
+    notFeelingWell:"आप ठीक नहीं लग रहे — कृपया मुख्य लक्षण बताइए (बुखार, सांस, सीने का दर्द, चक्कर)। मैं एक-दिन का घरेलू प्लान दे सकता हूँ और डॉक्टर से मिलने की सलाह दूंगा।",
+    diet_title:"आहार योजना",
+    medicine_title:"अक्सर उपयोग की जाने वाली दवाइयाँ (सामान्य नाम)",
+    homecare_title:"एक-दिन का घरेलू देखभाल योजना (सुरक्षित, गैर-नुस्खे)",
+    doctor_template_intro:"रोगी विवरण और लक्षण भरें, फिर डॉक्टर को कॉपी करके भेजें या क्लिनिक में दिखाएँ।",
+    disclaimer:"यह सामान्य जानकारी है, नुस्खा नहीं। सही खुराक और नुस्खे के लिए डॉक्टर से परामर्श करें।"
+  }
+};
+let lang='en';
+function setLang(l){ lang=l; updateLocale(); addMessage('bot', t('welcome')); prepareDoctorTemplate(); }
+
+function t(k,...args){
+  const v = locales[lang][k];
+  if(typeof v==='function') return v(...args);
+  return v || k;
+}
+
+/* ------------------------
+   Simple medicine & diet DB
+   ------------------------ */
+const MED_DB = {
+  fever:["Paracetamol (acetaminophen)","Ibuprofen (if no contraindication)"],
+  headache:["Paracetamol","Ibuprofen (if tolerated)"],
+  cold:["Antihistamines (cetirizine/loratadine)","Lozenges, saline nasal spray"],
+  cough:["Expectorant or suppressant depending on cough type — consult pharmacist"],
+  acidity:["Antacids (alginate/magnesium)","H2 blockers/PPIs (doctor consult)"],
+  allergy:["Antihistamines (cetirizine/loratadine)"],
+  pain:["Paracetamol","Ibuprofen (if safe)"]
+};
+
+function buildDiet(profile,symptom){
+  const age = profile.age;
+  const g = profile.gender;
+  const cond = (profile.conditions||'').toLowerCase();
+  const diet = [];
+  diet.push("Balanced meals: vegetables, fruits, whole grains, lean proteins (eggs, legumes, fish/poultry).");
+  diet.push("Drink water regularly; avoid sugary drinks.");
+  diet.push("Limit fried and processed foods.");
+  if(age && age<18) diet.push("Ensure adequate calories & protein for growth; include dairy or alternatives.");
+  if(age && age>60) diet.push("Prefer small frequent meals, high fiber, and hydration.");
+  if(g==='female') diet.push("Include iron & calcium rich foods.");
+  if(cond.includes('diabetes') || cond.includes('sugar')) diet.unshift("Prefer low GI foods, portion control, and avoid added sugars.");
+  if(cond.includes('bp')||cond.includes('hypertension')) diet.unshift("Reduce salt intake; increase potassium-rich fruits/veg.");
+  if(symptom==='fever') diet.push("Light, easy-to-digest foods (soups, khichdi), focus on fluids & electrolytes.");
+  if(symptom==='cold' || symptom==='cough') diet.push("Warm soups, honey for >1yr, warm fluids, steam inhalation.");
+  return diet;
+}
+
+/* ------------------------
+   Chat, profile, history
+   ------------------------ */
+const chatbox = document.getElementById('chatbox');
+let profile = {name:'',age:null,gender:'',conditions:''};
+
+function loadState(){
+  const p = localStorage.getItem('health_profile');
+  if(p) profile = JSON.parse(p);
+  const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+  for(const m of hist) appendMsg(m.sender,m.text,false);
+  updateProfileUI();
+  updateChatCount();
+}
+loadState();
+
+function saveProfile(){
+  profile.name = document.getElementById('name').value.trim();
+  profile.age = parseInt(document.getElementById('age').value) || null;
+  profile.gender = document.getElementById('gender').value;
+  profile.conditions = document.getElementById('conditions').value.trim();
+  if(!profile.name || !profile.age || !profile.gender){
+    alert(lang==='hi'? "कृपया नाम, आयु और लिंग भरें।":"Please enter name, age and gender.");
+    return;
+  }
+  localStorage.setItem('health_profile',JSON.stringify(profile));
+  addMessage('bot', t('saveProfileMsg'));
+  updateProfileUI();
+}
+function clearProfile(){
+  localStorage.removeItem('health_profile');
+  profile={name:'',age:null,gender:'',conditions:''};
+  document.getElementById('name').value='';
+  document.getElementById('age').value='';
+  document.getElementById('gender').value='';
+  document.getElementById('conditions').value='';
+  document.getElementById('profileStatus').innerText = t('profileNotSaved');
+  document.getElementById('profileBadge').innerText = 'No profile';
+  addMessage('bot', lang==='hi'? "प्रोफ़ाइल हटा दी गई।":"Profile cleared.");
+}
+
+/* append message + save */
+function appendMsg(sender,text,save=true){
+  const d=document.createElement('div');
+  d.className='msg '+(sender==='user'?'user':'bot');
+  d.innerText = (sender==='user'?'🧑 You: ':'🤖 Bot: ') + text;
+  chatbox.appendChild(d);
+  chatbox.scrollTop = chatbox.scrollHeight;
+  if(save){
+    const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+    hist.push({sender,text,ts:Date.now()});
+    localStorage.setItem('health_chat_history',JSON.stringify(hist));
+    updateChatCount();
+  }
+}
+function addMessage(sender,text){ appendMsg(sender,text,true); }
+function addMessageNoSave(sender,text){ appendMsg(sender,text,false); }
+
+function updateProfileUI(){
+  if(profile && profile.name){
+    document.getElementById('profileStatus').innerText = `${profile.name}, ${profile.age || ''} yrs`;
+    document.getElementById('profileBadge').innerText = t('profileSavedBadge', profile.name);
+    document.getElementById('name').value = profile.name;
+    document.getElementById('age').value = profile.age || '';
+    document.getElementById('gender').value = profile.gender || '';
+    document.getElementById('conditions').value = profile.conditions || '';
+  } else {
+    document.getElementById('profileStatus').innerText = t('profileNotSaved');
+    document.getElementById('profileBadge').innerText = 'No profile';
+  }
+}
+function updateChatCount(){
+  const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+  document.getElementById('chatCount').innerText = `${hist.length} messages`;
+}
+
+/* ------------------------
+   Input handling + logic
+   ------------------------ */
+function userSend(){
+  const txt = document.getElementById('inputBox').value.trim();
+  if(!txt) return;
+  addMessage('user',txt);
+  document.getElementById('inputBox').value='';
+  setTimeout(()=> {
+    const reply = handleInput(txt.toLowerCase());
+    addMessage('bot', reply);
+  },300);
+}
+
+function handleInput(msg){
+  // emergency detection
+  const dangerPhrases=['chest pain','shortness of breath','difficulty breathing','faint','unconscious','severe bleeding','blue lips','severe allergic'];
+  for(const p of dangerPhrases){
+    if(msg.includes(p)) return t('emergency_prompt') + " " + t('urgent');
+  }
+  // "not feeling well" handling
+  if(msg.includes('not feeling well') || msg.includes('feeling sick') || msg.includes('i am not well') || msg.includes('not well')){
+    return t('notFeelingWell') + "\n\n" + safeOneDayPlan();
+  }
+
+  // medicine requests
+  for(const key of Object.keys(MED_DB)){
+    if(msg.includes(key) || msg.includes(key+' medicine') || msg.includes('medicine for '+key)){
+      const meds = MED_DB[key].join("; ");
+      return `${t('medicine_title')}: ${meds}.\n\n${t('disclaimer')}\n\n${consultDoctorAdvice()}`;
+    }
+  }
+
+  // user asks for one-day medicine/dosing -> refuse dosing but offer template + homecare
+  if(msg.includes('one day') || msg.includes('one-day') || msg.includes('dose') || msg.includes('dosage') || msg.includes('how many') || msg.includes('mg') || msg.includes('tablet')){
+    return "I cannot provide dosages or prescribe tablets. " + consultDoctorAdvice() + "\n\n" + safeOneDayPlan();
+  }
+
+  // diet intent
+  if(msg.includes('diet') || msg.includes('what to eat') || msg.includes('what should i eat') || msg.includes('what to eat for')){
+    let symptom=null;
+    for(const k of Object.keys(MED_DB)) if(msg.includes(k)) symptom=k;
+    const diet = buildDiet(profile,symptom);
+    return `${t('diet_title')}:\n- ${diet.join("\n- ")}\n\n${t('disclaimer')}`;
+  }
+
+  // exercise
+  if(msg.includes('exercise') || msg.includes('workout') || msg.includes('back pain') || msg.includes('knee') || msg.includes('shoulder')){
+    return exerciseAdvice(msg);
+  }
+
+  if(msg.includes('history') || msg.includes('chat history')){
+    showHistory();
+    return lang==='hi'? "इतिहास विंडो खोल दी गई है।" : "Opened history window.";
+  }
+
+  // fallback
+  return t('symptom_help');
+}
+
+/* ------------------------
+   Home-care plan + consult text
+   ------------------------ */
+function safeOneDayPlan(){
+  // non-prescriptive one-day actions (safe)
+  const parts = [];
+  parts.push(t('homecare_title') + ":");
+  parts.push("- Rest and avoid strenuous activity.");
+  parts.push("- Keep hydrated: sip water or oral rehydration solutions if vomiting/diarrhea.");
+  parts.push("- Use non-drug measures: sponge with lukewarm water for fever, steam inhalation for congestion.");
+  parts.push("- Monitor symptoms: note temperature, breathing difficulty, new rashes, worsening pain.");
+  parts.push("- Do NOT self-prescribe doses. For specific medicine doses, consult a doctor or pharmacist.");
+  parts.push("\nIf symptoms worsen or emergency signs appear, seek immediate care: " + t('urgent'));
+  return parts.join("\n");
+}
+
+function consultDoctorAdvice(){
+  return (lang==='hi' ? "कृपया सही खुराक, उपयुक्त दवा और जांचों के लिए डॉक्टर/फार्मासिस्ट से सलाह लें।" : "Please consult a doctor or pharmacist for correct dosing, prescription, and investigations.");
+}
+
+/* ------------------------
+   Exercise & personalized tips
+   ------------------------ */
+function exerciseAdvice(msg){
+  if(msg.includes('back')) return "Lower back: pelvic tilts, cat-cow, bird-dog, gentle walking. Avoid heavy lifting. If pain radiates to legs or numbness, see clinician.";
+  if(msg.includes('knee')) return "Knee: straight leg raises, quad sets, mini-squats, cycling or swimming. Avoid deep squats if painful.";
+  if(msg.includes('shoulder') || msg.includes('neck')) return "Neck/shoulder: chin tucks, shoulder rolls, posture corrections, short breaks during desk work.";
+  return getPersonalizedTip();
+}
+function getPersonalizedTip(){
+  if(!profile.name || !profile.age || !profile.gender) return lang==='hi'? "पहले प्रोफ़ाइल सहेजें।" : "Please save profile to get personalized tips.";
+  let txt = `${profile.name} (${profile.age} yrs):\n`;
+  if(profile.age <18) txt += "- Growth: balanced meals, sleep 8–10h, outdoor play.\n";
+  else if(profile.age<=40) txt += "- Aim 150 min moderate cardio/week + strength training 2x/week.\n";
+  else txt += "- Daily walking, balance training; monitor BP/sugar.\n";
+  if(profile.gender==='female') txt += "- Ensure iron & calcium intake.\n";
+  if(profile.conditions) txt += `- Conditions: ${profile.conditions}. Discuss with doctor before starting new medicines/exercises.\n`;
+  txt += "\n" + t('disclaimer');
+  return txt;
+}
+
+/* ------------------------
+   History, exports, doctor modal
+   ------------------------ */
+function showHistory(){
+  const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+  const w = window.open('','_blank','width=700,height=600,scrollbars=yes');
+  const html = `
+    <html><head><title>Chat History</title></head><body style="font-family:Arial,sans-serif;padding:12px;">
+    <h2>${lang==='hi'?'चैट इतिहास':'Chat History'}</h2>
+    <pre style="white-space:pre-wrap;font-family:monospace;">${hist.map(h=> (new Date(h.ts)).toLocaleString() + ' - ' + (h.sender==='user'?'You: ':'Bot: ') + h.text).join('\\n\\n')}</pre>
+    <div style="margin-top:10px"><button onclick="navigator.clipboard.writeText(document.querySelector('pre').innerText)">Copy</button>
+    <button onclick="window.print()">Print</button></div>
+    </body></html>`;
+  w.document.write(html);
+  w.document.close();
+}
+function exportChat(){
+  const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+  const text = `Profile:\\nName: ${profile.name||'N/A'}\\nAge: ${profile.age||'N/A'}\\nGender: ${profile.gender||'N/A'}\\nConditions: ${profile.conditions||'N/A'}\\n\\nChat:\\n` +
+    hist.map(h=> `${new Date(h.ts).toLocaleString()} - ${h.sender==='user'?'You':'Bot'}: ${h.text}`).join('\\n');
+  const blob = new Blob([text],{type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`${(profile.name||'report').replace(/\\s+/g,'_')}_chat.txt`; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  addMessage('bot', lang==='hi' ? "निर्यात सफल।" : "Exported successfully.");
+}
+function exportReport(){
+  const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+  const summary = `Health Summary\\n\\nName: ${profile.name||'N/A'}\\nAge: ${profile.age||'N/A'}\\nGender: ${profile.gender||'N/A'}\\nConditions: ${profile.conditions||'N/A'}\\n\\nRecent chat:\\n` +
+    hist.slice(-10).map(h=> `${new Date(h.ts).toLocaleString()} - ${h.sender==='user'?'You':'Bot'}: ${h.text}`).join('\\n');
+  const blob = new Blob([summary],{type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`${(profile.name||'report').replace(/\\s+/g,'_')}_summary.txt`; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  addMessage('bot', lang==='hi' ? "निर्यात सफल।" : "Exported successfully.");
+}
+
+/* Doctor template modal */
+function prepareDoctorTemplate(){
+  const hist = JSON.parse(localStorage.getItem('health_chat_history')||'[]');
+  const recent = hist.slice(-8).map(h=> `${new Date(h.ts).toLocaleString()} - ${h.sender==='user'?'You':'Bot'}: ${h.text}`).join('\\n');
+  const tpl = [
+    `Name: ${profile.name||''}`,
+    `Age: ${profile.age||''}`,
+    `Gender: ${profile.gender||''}`,
+    `Known conditions/allergies: ${profile.conditions||'N/A'}`,
+    `Main complaint: `,
+    `When it started: `,
+    `Symptoms / severity: `,
+    `What I tried today (home-care): `,
+    `Recent chat summary:`,
+    `${recent}`,
+    `Request: Please advise on diagnosis, necessary tests and correct medicine dosing.`
+  ].join('\\n');
+  document.getElementById('doctorTemplate').value = tpl;
+  document.getElementById('doctorIntro').innerText = t('doctor_template_intro');
+}
+function openDoctorModal(){
+  prepareDoctorTemplate();
+  document.getElementById('modalOverlay').style.display='block';
+  document.getElementById('doctorModal').style.display='block';
+}
+function closeDoctorModal(){
+  document.getElementById('modalOverlay').style.display='none';
+  document.getElementById('doctorModal').style.display='none';
+}
+function copyDoctorTemplate(){
+  const txt = document.getElementById('doctorTemplate').value;
+  navigator.clipboard.writeText(txt).then(()=> {
+    addMessage('bot', lang==='hi'? "डॉक्टर टेम्पलेट क्लिपबोर्ड पर कॉपी हो गया।": "Doctor template copied to clipboard.");
+  });
+}
+
+/* ------------------------
+   System helpers + locale
+   ------------------------ */
+function addSystem(kind){
+  if(kind==='symptom_help') addMessage('bot', t('symptom_help'));
+  if(kind==='exercise_tip') addMessage('bot', getPersonalizedTip());
+  if(kind==='urgent') addMessage('bot', t('urgent'));
+}
+function updateLocale(){
+  document.getElementById('lblName').innerText = lang==='hi'? 'पूरा नाम' : 'Full name';
+  document.getElementById('lblAge').innerText = lang==='hi'? 'आयु' : 'Age';
+  document.getElementById('lblGender').innerText = lang==='hi'? 'लिंग' : 'Gender';
+  document.getElementById('lblConditions').innerText = lang==='hi'? 'परिचित स्थिति / एलर्जी' : 'Known conditions / allergies (optional)';
+  document.getElementById('btnSave').innerText = lang==='hi'? 'सहेजें' : 'Save Profile';
+  document.getElementById('quickTitle').innerText = lang==='hi'? 'त्वरित क्रियाएँ' : 'Quick Actions';
+  document.getElementById('chatTitle').innerText = lang==='hi'? 'चैट' : 'Chat';
+  document.getElementById('chatSubtitle').innerText = lang==='hi'? 'लक्षण, दवाइयाँ (सामान्य), आहार, व्यायाम पूछें।' : "Ask symptoms, medicines (generic names), diet, or exercise.";
+  document.getElementById('disclaimer').innerHTML = `<strong>${lang==='hi' ? 'अस्वीकरण' : 'Disclaimer'}:</strong> ${t('disclaimer')}`;
+  prepareDoctorTemplate();
+}
+
+/* small init */
+updateLocale();
+addMessage('bot', t('welcome'));
+updateProfileUI();
+
+/* Save incoming messages to history when appended */
+(function interceptAppend(){
+  const orig = appendMsg;
+  window.appendMsg = function(sender,text,save=true){
+    orig(sender,text,save);
+  }
+})();
+
+/* store each displayed message in local history automatically via appendMsg logic already */
+</script>
+</body>
+</html>
